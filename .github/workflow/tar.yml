@@ -1,0 +1,84 @@
+name: Build and Release Appwrite
+
+on:
+  push:
+    branches: [ main, master ]
+    paths:
+      - 'src/main.js'
+      - 'package.json'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  packages: write
+  actions: read
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0 # Commit history ရဖို့အတွက်
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        
+    - name: Validate required files
+      run: |
+        if [ ! -f "src/main.js" ]; then
+          echo "❌ src/main.js not found!"
+          exit 1
+        fi
+        if [ ! -f "package.json" ]; then
+          echo "❌ package.json not found!"
+          exit 1
+        fi
+        echo "✅ Required files found"
+        
+    - name: Create deployment archive
+      run: |
+        # Appwrite Function အတွက် main.js နဲ့ package.json က Root မှာ ရှိနေတာ ပိုကောင်းပါတယ်
+        # ဒါကြောင့် Folder ထဲမထည့်ဘဲ တိုက်ရိုက် compress လုပ်ပါမယ်
+        tar -czf Appwrite.tar.gz src/ package.json
+        echo "📦 Archive created: Appwrite.tar.gz"
+        echo "📊 Archive size: $(du -h Appwrite.tar.gz | cut -f1)"
+        
+    - name: Generate release notes
+      id: release_notes
+      run: |
+        LATEST_COMMIT=$(git log -1 --pretty=format:"%s")
+        SHORT_SHA=$(git rev-parse --short HEAD)
+        
+        cat > release_notes.md << EOF
+        ## 🚀 Appwrite Functions Deployment Package
+
+        ⭐ **Quick Start:**
+        1. Appwrite Console သို့သွားပါ။
+        2. Function အသစ်တစ်ခု တည်ဆောက်ပါ။
+        3. Manual Deployment ကိုရွေးပြီး ဤ **Appwrite.tar.gz** ကို Upload လုပ်ပါ။
+        4. Entrypoint ကို \`src/main.js\` ဟု သတ်မှတ်ပါ။
+
+        ---
+        **Build Info:**
+        - **Commit:** ${SHORT_SHA}
+        - **Message:** ${LATEST_COMMIT}
+        - **Date:** $(date '+%Y-%m-%d %H:%M')
+        EOF
+        
+    - name: Create or Update Release
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: "Appwrite-latest"
+        name: "Appwrite Functions Build"
+        body_path: release_notes.md
+        files: Appwrite.tar.gz
+        draft: false
+        prerelease: false
+        make_latest: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
